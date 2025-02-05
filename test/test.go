@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,10 +14,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func Exec(reportDir string, name string, tests []string, count int, batch bool, done chan struct{}) {
-	test := newTest(reportDir, name, tests, count, batch, done)
+func Exec(reportDir string, name string, tests []string, count int, batch bool, ctx context.Context) {
+	test := newTest(reportDir, name, tests, count, batch, ctx)
 
-	group := errgroup.Group{}
+	group, ctx := errgroup.WithContext(ctx)
 	group.Go(test.checkAndPrint)
 	group.Go(test.collectReport)
 
@@ -42,16 +43,16 @@ type Test struct {
 	count        int
 	batch        bool
 
-	done chan struct{}
+	ctx context.Context
 }
 
-func newTest(reportPath, name string, tests []string, count int, batch bool, done chan struct{}) *Test {
+func newTest(reportPath, name string, tests []string, count int, batch bool, ctx context.Context) *Test {
 	t := &Test{
 		testResultCh: make(chan Result, len(tests)*10),
 		storagePath:  reportPath,
 		count:        count,
 		batch:        batch,
-		done:         done,
+		ctx:          ctx,
 	}
 	t.report = NewReport(name, t.getExecCount(), tests)
 	return t
@@ -60,8 +61,9 @@ func newTest(reportPath, name string, tests []string, count int, batch bool, don
 func (t *Test) checkAndPrint() error {
 	execCount := t.getExecCount()
 	for !t.finish.Load() {
+
 		select {
-		case <-t.done:
+		case <-t.ctx.Done():
 			t.finish.Store(true)
 			return nil
 		default:
@@ -103,7 +105,7 @@ func (t *Test) printReport() {
 	t.report.makeReport()
 	fmt.Print(
 		fmt.Sprintf(
-			"\u001B[H\u001B[2J\u001B[1m----------------------%s test report --------------------------\u001B[0m\n Commed: go %s\n Fail report: %s\n%s\n",
+			"\u001B[25l\u001B[H\u001B[2J\u001B[1m----------------------%s test report --------------------------\u001B[0m\n Commed: go %s\n Fail report: %s\n%s\n",
 			t.report.name,
 			strings.Join(t.buildCommandArg("preview", t.count), " "),
 			t.storagePath,
@@ -121,7 +123,7 @@ func (t *Test) execTest(name string, count int) {
 	response, arg := Result{name: name}, t.buildCommandArg(name, count)
 	for i := 0; i < t.getExecCount(); i++ {
 		select {
-		case <-t.done:
+		case <-t.ctx.Done():
 			return
 		default:
 			cmd := exec.Command("go", arg...)

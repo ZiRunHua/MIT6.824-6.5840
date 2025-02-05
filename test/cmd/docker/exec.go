@@ -4,6 +4,7 @@
 package docker
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,37 +15,29 @@ const WorkDir = "/mit6.824"
 
 type Done = chan struct{}
 
-func Build(done Done, imgName, dockerfilePath string) {
-	execCmd(done, "docker", "build", "-t", imgName, dockerfilePath)
+func Build(ctx context.Context, imgName, dockerfilePath string) {
+	execCmd(ctx, "docker", "build", "-t", imgName, dockerfilePath)
 }
 
-func Run(done Done, name, volume, imgName, command string) {
+func Run(ctx context.Context, name, volume, imgName, command string) {
 	execCmd(
-		done, "docker", "run", "--rm", "--name", name, "-v", volume,
+		ctx, "docker", "run", "--rm", "--name", name, "-v", volume,
 		"--entrypoint",
 		"/bin/sh", imgName, "-c", command,
 	)
 }
 
-func execCmd(done Done, name string, arg ...string) {
+func execCmd(ctx context.Context, name string, arg ...string) {
 	fmt.Println(append([]string{name}, arg...))
-	cmd := exec.Command(name, arg...)
+	cmd := exec.CommandContext(ctx, name, arg...)
 	cmd.Stdout, cmd.Stderr, cmd.Stdin = os.Stdout, os.Stderr, os.Stdin
-	if done != nil {
-		go func() {
-			<-done
-			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
-			}
-		}()
-	}
 	_ = cmd.Run()
 }
 
-func Start(done Done, command string, file string, volume string) {
+func Start(ctx context.Context, command string, file string, volume string) {
 	imgName := "mit6.824-test"
-	Build(done, imgName, file)
+	Build(ctx, imgName, file)
 	name := fmt.Sprintf("mit6.824-%d", time.Now().Unix())
-	defer exec.Command("docker", "rm", "-f", name)
-	Run(done, name, volume, imgName, command)
+	defer exec.Command("docker", "rm", "-f", name).Run()
+	Run(ctx, name, volume, imgName, command)
 }

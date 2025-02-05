@@ -18,25 +18,25 @@ import (
 
 func main() {
 	args := getArgs()
-	done := make(chan struct{})
-	os.Environ()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	go func() {
 		signalChan := make(chan os.Signal, 1)
 		signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 		<-signalChan
 		fmt.Println("\r exiting...")
-		close(done)
+		cancel()
 	}()
-	start(args, done)
+	start(args, ctx)
 }
 
-func start(args Args, done chan struct{}) {
+func start(args Args, ctx context.Context) {
 	var title, runDir, command string
 	lab, runName := args.Lab.GetLab(), args.Run.String()
 	if lab != nil {
 		if len(runName) > 0 {
 			title = fmt.Sprintf("%s %s", lab.Name, lab.Name)
-			command = fmt.Sprintf("time go test -run %s", args.Run)
+			command = fmt.Sprintf("time go test -run %s", args.Run.String())
 		} else {
 			title = lab.Name
 			command = fmt.Sprintf("time go test -run %s", lab.Short)
@@ -45,14 +45,14 @@ func start(args Args, done chan struct{}) {
 	} else {
 		panic("not run")
 	}
-	run(args, title, runDir, command, done)
+	run(args, title, runDir, command, ctx)
 }
 
-func run(args Args, title, workDir, command string, done chan struct{}) {
+func run(args Args, title, workDir, command string, ctx context.Context) {
 	if args.Docker {
 		command = args.GetDockerCmd("test/cmd/performance")
 		volume := fmt.Sprintf("%s:%s", test.ReportDir, test.DockerReportDir)
-		docker.Start(done, command, test.RootDir, volume)
+		docker.Start(ctx, command, test.RootDir, volume)
 		return
 	}
 	reportDir := test.GetReportDir("performance", args.Lab.String(), args.Run.String())

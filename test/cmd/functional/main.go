@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -14,14 +15,14 @@ import (
 func main() {
 	args := getArgs()
 	var tests []string
-
-	done := make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	go func() {
 		signalChan := make(chan os.Signal, 1)
 		signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 		<-signalChan
 		fmt.Println("\r exiting...")
-		close(done)
+		cancel()
 	}()
 	var name, wordPath string
 	lab, runName := args.Lab.GetLab(), args.Run.String()
@@ -32,19 +33,19 @@ func main() {
 			tests = lab.Tests
 		}
 		name, wordPath = args.Lab.String(), lab.Path
-		run(name, wordPath, tests, args, done)
+		run(name, wordPath, tests, args, ctx)
 	} else {
 		for _, lab := range test.Labs {
-			run(lab.Name, lab.Path, lab.Tests, args, done)
+			run(lab.Name, lab.Path, lab.Tests, args, ctx)
 		}
 	}
 }
 
-func run(name, workDir string, tests []string, args Args, done chan struct{}) {
+func run(name, workDir string, tests []string, args Args, ctx context.Context) {
 	if args.Docker {
 		command := args.GetDockerCmd("test/cmd/functional")
 		volume := fmt.Sprintf("%s:%s", test.ReportDir, test.DockerReportDir)
-		docker.Start(done, command, test.RootDir, volume)
+		docker.Start(ctx, command, test.RootDir, volume)
 		return
 	}
 	reportDir := test.GetReportDir("functional", args.Lab.String(), args.Run.String())
@@ -52,5 +53,5 @@ func run(name, workDir string, tests []string, args Args, done chan struct{}) {
 	if err != nil {
 		panic(err)
 	}
-	test.Exec(reportDir, name, tests, args.Count, args.Batch, done)
+	test.Exec(reportDir, name, tests, args.Count, args.Batch, ctx)
 }
