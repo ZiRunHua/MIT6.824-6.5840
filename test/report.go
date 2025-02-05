@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"mit-6.2840-test/cmd/docker"
+	"mit-6.824-test/cmd/docker"
 )
 
 var ReportDir = filepath.Join(RootDir, "test", "report")

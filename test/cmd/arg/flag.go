@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"mit-6.2840-test"
+	"mit-6.824-test"
 )
 
 type FlagLab struct {

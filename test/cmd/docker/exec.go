@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const WorkDir = "/mit6.2840"
+const WorkDir = "/mit6.824"
 
 type Done = chan struct{}
 
@@ -42,9 +42,9 @@ func execCmd(done Done, name string, arg ...string) {
 }
 
 func Start(done Done, command string, file string, volume string) {
-	imgName := "mit6.2840-test"
+	imgName := "mit6.824-test"
 	Build(done, imgName, file)
-	name := fmt.Sprintf("mit6.2840-%d", time.Now().Unix())
+	name := fmt.Sprintf("mit6.824-%d", time.Now().Unix())
 	defer exec.Command("docker", "rm", "-f", name)
 	Run(done, name, volume, imgName, command)
 }

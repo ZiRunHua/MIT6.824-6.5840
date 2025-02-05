@@ -1,4 +1,4 @@
-module mit-6.2840-test
+module mit-6.824-test
 
 go 1.19
 

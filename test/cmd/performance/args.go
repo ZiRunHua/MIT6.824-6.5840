@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 
-	"mit-6.2840-test/cmd/arg"
+	"mit-6.824-test/cmd/arg"
 )
 
 type Args struct {

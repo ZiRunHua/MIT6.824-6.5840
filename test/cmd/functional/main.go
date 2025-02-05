@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"syscall"
 
-	test "mit-6.2840-test"
-	"mit-6.2840-test/cmd/docker"
+	test "mit-6.824-test"
+	"mit-6.824-test/cmd/docker"
 )
 
 func main() {

@@ -18,11 +18,11 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - ./report:/mit6.2840/report
+      - ./report:/mit6.824/report
     networks:
       - network
     environment:
       debug: "false"
-    command: /bin/bash -c "cd src/raft && time go test > /mit6.2840/report/test1.log"
+    command: /bin/bash -c "cd src/raft && time go test > /mit6.824/report/test1.log"
 networks:
   network:

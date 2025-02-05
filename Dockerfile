@@ -4,7 +4,7 @@ ENV GO111MODULE=on
 ENV GOPROXY=https://goproxy.io,direct
 ENV TZ=Asia/Shanghai
 
-WORKDIR /mit6.2840
+WORKDIR /mit6.824
 
 COPY test/go.mod test/go.mod
 COPY test/go.sum test/go.sum
