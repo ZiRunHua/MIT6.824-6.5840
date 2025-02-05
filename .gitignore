@@ -1,1 +1,4 @@
 /test/report
+
+*.excalidraw
+/docs/.obsidian
