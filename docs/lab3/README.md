@@ -7,7 +7,6 @@
 
 ### 通关标准
 - 6分钟的实际运行时间和1分钟的CPU时间（来自lab3的最后一个`Hint`）。
-
 - 所有测试1000次运行稳定通过
 
 ### 系统概述
@@ -16,7 +15,7 @@
 
 #### 模块划分
 
-![module-division.svg](img/module-division.svg)
+![module-division.svg](img/module-division.png)
 
 Raft分为三个模块Elect、Commit、Node
 
@@ -26,59 +25,58 @@ Raft分为三个模块Elect、Commit、Node
 
 模块间的调用关系如下：
 
-![module-call.svg](img/module-call.svg)
+![module-call.png](img/module-call.png)
 
-raft在需要发起选举时，将新的选举号传递给Elect，Elect向Node发送预选举，预选举通过后向node发送拉票请求，Elect选举结束后向raft报告选举结果和term，raft根据当前状态，来决定是否转变身份。
+raft在需要发起选举时，将新的选举号传递给Election，Election向Node发送预选举，预选举通过后向node发送拉票请求，Elect选举结束后向raft报告选举结果和term，raft根据当前状态，来决定是否转变身份。
 
 raft将接收的日志和快照交由Commit处理，Commit将数据交由LogStore保存，并在处于Leader状态时启用Manager，由Manager负责向Follower同步状态、维持Follower的同步进度，以及提交应用被大多数Follower所同步的日志。
 
 #### 锁顺序
 
-为各个模块设置锁，从而减低锁的颗粒度，提高性能，同时为了避免死锁，对于Elect和Commit向Raft的回调，需接触当前锁后再回调、或在新的协程中回调，最后依照模块调用关系形成如下锁顺序：
+为各个模块设置锁，从而减低锁的颗粒度，提高性能，同时为了避免死锁，对于Election和Commit向Raft的回调，需接触当前锁后再回调、或在新的协程中回调，最后依照模块调用关系形成如下锁顺序：
 
-![lock.svg](./img/lock.svg)
+![lock.png](./img/lock.png)
 
 ### 模块设计
 
 #### Raft
 
-#### Elect
+#### Election
 
 ##### 骨架
 
 ```go
-type (
-	Election interface {
-	PreVote() bool
-	Do()
-	End()
-}
-Candidate interface {
-	WinElection(term int)
-	FailElection(term int)
-}
-Voter interface {
-	PreVote(term int, lastCommand commit.LogEntry) bool
-	AskVote(term int, ballotBox BallotBox, lastCommand commit.LogEntry)
-}
-election struct {
-	term int
-	
-	candidate Candidate
-	voters    []Voter // 选民不包括自己  
-	ballotBox BallotBox
-	
-	lastCommand commit.LogEntry
-	close       atomic.Bool
-}
-BallotBox chan bool
+type (  
+    Election interface {  
+       PreVote() bool  
+       Do()  
+       End()  
+    }  
+    Candidate interface {  
+       WinElection(term int)  
+       FailElection(term int)  
+       GetMe() int  
+    }  
+    Voter interface {  
+       PreVote(term int, latest commit.LogEntryID, applyIndex int) bool  
+       AskVote(term int, ballotBox BallotBox, latest commit.LogEntryID, applyIndex int)  
+    }  
+    election struct {  
+       term             int  
+       latest           commit.LogEntryID  
+       latestApplyIndex int  
+       candidate        Candidate  
+       voters           []Voter // 选民不包括自己  
+       ballotBox        BallotBox  
+  
+       close atomic.Bool  
+    }  
+    BallotBox chan bool  
 )
 ```
 
-- 在 Election 看来，整个 Raft 实例是一个 `Candidate`，负责竞选并处理选举结果。
+- 在 `Election` 看来，整个 Raft 实例是一个 `Candidate`，负责竞选并处理选举结果。
 - 集群中的每个`Node`被视为 `Voter`，负责参与预选和正式投票。
-
-这便是golang新编程理念的体现：通过接口和抽象分离逻辑
 
 每次选举会new一个新的Election，在选举前会先通过PreVote，测试中频繁让节点失联，所以引入预选举机制保证Leader免受重连节点的影响是非常有必要的，对于性能的提高非常有帮助。
 > 预选举介绍
@@ -97,6 +95,47 @@ BallotBox chan bool
 #### Commit
 
 #### Node
+node模块主要负责向节点发起rpc以及保存节点的临时状态，作为Leader时启动心跳定时器。
+##### 骨架
+```go
+type (
+	Raft interface {  
+	    EndOfTerm(newTerm int)  
+	    GetMe() int  
+	    Killed() bool  
+	    GetTerm() int  
+	    IsLeader() bool  
+	}  
+	Node interface {  
+		GetNodeId() int  
+		// Ticker 心跳定时器  
+		Ticker()  
+		// PreVote 发起预选举  
+		PreVote(term int, latest commit.LogEntryID, applyIndex int) bool  
+		// AskVote 发起选举  
+		AskVote(term int, ballotBox election.BallotBox, latest commit.LogEntryID, applyIndex int)  
+		// GetLogIndex 获取同步进度  
+		GetLogIndex() (index int, verify bool)  
+		// AddLogIndex 推进同步进度  
+		AddLogIndex(add int) int  
+		// RollbackLogIndex 回退同步进度  
+		RollbackLogIndex(index int)  
+		// SyncCommit 发送提交应用  
+		SyncCommit(term int, index int) cmn.SendStatus  
+		// SyncState 同步状态  
+		SyncState(  
+		    term int, prev *commit.LogEntry, logEntries []*commit.LogEntry, snapshot *commit.Snapshot) (  
+		    cmn.SendStatus, cmn.Conflict,  
+		)
+	}
+)
+```
+在lab3C中除了引入实验提到的回退算法的优化外，还引入了一次同步多条日志的优化，但是lab4D快照的引入让这一优化的效果变差，因为实验测试的快照间隔为10，所以需要同步的日志一次最多不超过10条，引入这一优化的一个重要原因是在此之前无法通过`TestFigure8Unreliable3C`。
+TestFigure8Unreliable3C中不停得概率性发生Leader失联，并且rpc调用有三分之二的概率发生长等待，等待时间在200ms~2000ms，
+
+lab3D中提到需要实现`InstallSnapshot` RPC，但是将`AppendEntries` 和 `InstallSnapshot`合并为`SyncState`更合适，这样可以简化逻辑，减少lab3C到lab3D需要修改的代码。
+
+
 
 TestCount3B会测试rpc的调用次数 rpc调用次数不能过多
 
