@@ -9,7 +9,7 @@
 
 Raft 分为三个模块 Election、Commit、Node
 
-- Election 负责选举，Raft 在发起选举时会传递选举的 term 给 Election，Election 在选举完成后向 Raft 反馈选举结果和对应的 term。
+- Election 负责选举。
 - Commit 负责管理日志，他有两个子模块，Manage 负责管理日志，LogStore 负责日志的存储和读取。
 - Node 负责和其他节点的通讯、保持 Leader 地位（发送心跳），以及存储节点的临时状态（不持久化），存储状态包括节点的同步进度，以及提交进度。
 
