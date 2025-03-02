@@ -1,6 +1,6 @@
 remote_theme: just-the-docs/just-the-docs
 plugins:
   - jekyll-remote-theme
-sidebar:
+nav:
   - title: "GitHub 仓库"
     url: "https://github.com/ZiRunHua/MIT6.824-6.5840"
