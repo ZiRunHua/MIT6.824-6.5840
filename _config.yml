@@ -1,0 +1,4 @@
+remote_theme: just-the-docs/just-the-docs
+plugins:
+  - jekyll-remote-theme
+gh_edit_repository: "https://github.com/ZiRunHua/MIT6.824-6.5840"

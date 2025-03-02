@@ -1,3 +1,7 @@
+---
+title: Lab4：KvRaft 的实现
+nav_order: 3
+---
 # lab4
 ## 需求
 [Lab 3: KvRaft](http://nil.csail.mit.edu/6.5840/2024/labs/lab-kvraft.html)

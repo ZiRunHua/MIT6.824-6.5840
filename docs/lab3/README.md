@@ -1,3 +1,7 @@
+---
+title: Lab3：Raft 的实现
+nav_order: 2
+---
 ## lab3
 ### 需求
 [Lab 3: Raft](http://nil.csail.mit.edu/6.5840/2024/labs/lab-raft.html)
