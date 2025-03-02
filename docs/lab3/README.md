@@ -4,7 +4,9 @@
 #### 模块划分
 
 <div style="text-align:center">
-  <img src="../img/lab3/module.png" style="width:600px;" />
+	<a href="../img/lab3/module.png">
+	  <img src="../img/lab3/module.png" style="width:600px;"  alt=""/>
+	</a>
 </div>
 
 Raft 分为三个模块 Election、Commit、Node
