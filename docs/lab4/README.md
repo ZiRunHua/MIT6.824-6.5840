@@ -3,7 +3,35 @@ title: Lab4：KvRaft 的实现
 nav_order: 3
 ---
 # lab4
-## 需求
+## <a name=''></a>目录
+<!-- vscode-markdown-toc -->
+- [lab4](#lab4)
+  - [目录](#目录)
+  - [需求](#需求)
+  - [RPC调用优化](#rpc调用优化)
+    - [优化思路](#优化思路)
+  - [模块划分](#模块划分)
+    - [Client](#client)
+    - [Server](#server)
+    - [DataStore](#datastore)
+  - [RPC Package](#rpc-package)
+    - [operation](#operation)
+    - [Client Package](#client-package)
+      - [UML](#uml)
+    - [Server Package](#server-package)
+      - [操作的生命周期](#操作的生命周期)
+      - [操作的重复执行](#操作的重复执行)
+      - [UML](#uml-1)
+    - [rpc.go](#rpcgo)
+      - [对外接口](#对外接口)
+      - [ RPC 封装](#-rpc-封装)
+
+<!-- vscode-markdown-toc-config
+	numbering=false
+	autoSave=false
+	/vscode-markdown-toc-config -->
+<!-- /vscode-markdown-toc -->
+## <a name='-1'></a>需求
 [Lab 3: KvRaft](http://nil.csail.mit.edu/6.5840/2024/labs/lab-kvraft.html)
 - 实现一个 key/value 存储服务，有多个 Raft 进行复制。
 - Get/Put/Append 方法的调用是线性化的，同时保证多个 Raft 上的执行顺序相同，与 lab2 不同 Put/Append 不需要返回值。
@@ -13,7 +41,7 @@ nav_order: 3
 在此之前有必要读下助教的文章
 https://thesquareplanet.com/blog/students-guide-to-raft/#applying-client-operations
 
-## RPC调用优化
+## <a name='RPC'></a>RPC调用优化
 在开始实验前有必要优化下实验 RPC，下面以 lab2 为例
 实验中的 RPC 调用方式如下：
 ```go
@@ -33,7 +61,7 @@ func Get(e *labrpc.ClientEnd, args GetArgs) (ok bool, reply GetReply) {
 ```
 但如果每声明一个 RPC 都要写一个封装方法，太过麻烦了，假设现在是一个庞大的系统，有非常的多的 RPC，如果每个 RPC 都要写一个封装方法那太影响开发效率了
 
-### 优化思路
+### <a name='-1'></a>优化思路
 
 **我希望让 RPC 调用更像普通方法调用（这才更像 RPC），同时提升类型安全性和可读性**。使用泛型刚好能够解决
 
@@ -84,26 +112,26 @@ func (ck *Clerk) Append(key string, value string) string {
     return RpcAppend.Call(ck.server, PutAppendArgs{Key: key, Value: value, ClientId: ck.id, MsgId: nrand()}).Value  
 }
 ```
-## 模块划分
+## <a name='-1'></a>模块划分
 
 <div style="text-align:center">
   <img src="../img/lab4/module.png" style="width: 500px;" />
 </div>
 
-### Client
+### <a name='Client'></a>Client
 - 通过 RPC 调用发起操作和维持自身状态
 
-### Server
+### <a name='Server'></a>Server
 - 充当中间层，处理来自 Client 的请求，通过 RPC 接收操作。
 - 与 Raft 模块交互，将应用操作和快照转发至 Raft 模块。
 - 将 Raft 中获得一致性的操作（即Raft提交应用的操作），交由 DataStore 执行，并将结果返回给正在等待的 Client。
 - 在适当时发起快照，从 DataStore 获取快照并转至 Raft，以及将 Raft 获得一致性的快照交由 DataStore 用于数据加载。
-### DataStore
+### <a name='DataStore'></a>DataStore
 - 负责持久化存储数据和快照。
 - 提供数据操作的接口，用于 Server 执行操作。
 - 提供快照的获取和加载的接口，供 Server 管理快照。
 
-## RPC Package
+## <a name='RPCPackage'></a>RPC Package
 在完成 Lab3 的 Raft 后，后续 Lab4 和 Lab5 实验都是基于 Raft 去构建系统，
 所以有必要设计一个包去封装客户端与集群的交互，以及服务端对 Raft 的管理，而我们只需要在应用层处理一致性提交后的数据存储。
 
@@ -147,7 +175,7 @@ func (ck *Clerk) Append(key string, value string) string {
         server.go
 ```
 
-### operation
+### <a name='operation'></a>operation
 对于 RPC 包的实现，首先要了解操作和消息的定义，operation中主要定义了操作相关的结构体：
 
 ```go
@@ -200,10 +228,10 @@ type CommonArgs[T any] struct {
 ```
 MsgId 和 OpId 由 client 维持自增的，MsgId 与 ClientId 组合用来重复检测，ClientId 与 OpId 组合作为操作的唯一标识，重复检测后 MsgId 就没用了，最后传给 Raft 的是 Data 部分。
 
-### Client Package
+### <a name='ClientPackage'></a>Client Package
 RPC 调用的发起方，承担的作用非常简单，主要提供获取集群服务、更新 Leader 等接口方法，并负责维护操作 ID 和 MsgID 的自增。
 
-#### UML
+#### <a name='UML'></a>UML
 
 <div style="text-align:center">
   <img src="../img/lab4/client-uml.svg" />
@@ -211,10 +239,10 @@ RPC 调用的发起方，承担的作用非常简单，主要提供获取集群�
 
 > 后面提到的 Client 都代指 Clerk 这个接口
 
-### Server Package
+### <a name='ServerPackage'></a>Server Package
 RPC 调用的接收方，主要的职责是维护一个操作的生命周期，从接收客户端操作消息开始，将操作传入 Raft，到操作被 Raft 提交，将操作通过 DataStore 接口应用，最后向等待的客户端返回操作结果。
 
-#### 操作的生命周期
+#### <a name='-1'></a>操作的生命周期
 
 <div style="text-align:center">
   <img src="../img/lab4/msg-life-cycle.png" style="min-width: 800px; max-width:80%" />
@@ -233,21 +261,21 @@ RPC 调用的接收方，主要的职责是维护一个操作的生命周期，�
 	- MsgId 是新的，但 OpId 是旧的，如果 OpId 被处理过，显然直接返回之前存储的结果，如果 OpId 没被处理过，这可能是 Client 正在寻找可以执行操作的 Leader ，无论哪种情况，都应该加入操作等待组。
 	- MsgId 和 OpId 都是新的，因为操作的线性化，Client 只有在一个操作完成后才发起新的操作，如果操作等待组中还有正在等待答复的RPC，直接广播后关闭等待组，然后使用新的等待组。
 	
-#### 操作的重复执行
+#### <a name='-1'></a>操作的重复执行
 在 Raft 提交应用后判断 OpId 是否重复就可以保证操作不被重复执行，在此基础上，在操作传入 Raft 前进行一次重复检测，来以免重复的日志增加 Raft 的同步压力。
 
 其实一张图胜千言，操作等待组的实现使用通道就能完成，如果你完成了lab4A，那lab4B的快照对你来说就非常容易了
-#### UML
+#### <a name='UML-1'></a>UML
 
 <div style="text-align:center">
   <img src="../img/lab4/server-uml.svg" />
 </div>
 
-### rpc.go
+### <a name='rpc.go'></a>rpc.go
 
 rpc.go 主要由对外接口和 RPC 封装两部分构成。
 
-#### 对外接口
+#### <a name='-1'></a>对外接口
 
 rpc.go 通过 `DataStore<T>`、`Server<T>` 和 `Clerk` 三个接口为外部提供依赖，使用 RPC 包需要实现 `DataStore` 接口，然后使用 `DataStore` 来生成 `Server`。
 
@@ -255,7 +283,7 @@ rpc.go 通过 `DataStore<T>`、`Server<T>` 和 `Clerk` 三个接口为外部提�
   <img src="../img/lab4/rpc-public.svg" />
 </div>
 
-####  RPC 封装
+#### <a name='RPC-1'></a> RPC 封装
 开头提到的关于 RPC 的优化，现在更上一层，加入了 `CommonArgs` 和 `CommonReply` ，它们在 Call 方法中被使用， Call 方法的返回是一个操作完成后的结果，是的，Call 方法不会返回失败，Call 方法中利用 Clerk 接口，完成客户端与集群的全部交互，包括寻找 Leader ，消息重试，直到操作被服务器应答成功，然后 Call 方法返回操作结果，如此将 RPC 不再是针对某个 Raft 或 Server 发起，而是针对整个集群发起。
 > 别忘了调用 `labgob.Register` 注册结构体
 
