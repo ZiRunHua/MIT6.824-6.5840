@@ -1,15 +1,14 @@
 ## lab3
+### 需求
+[Lab 3: Raft](http://nil.csail.mit.edu/6.5840/2024/labs/lab-raft.html)
 ### 系统设计
-
 #### 模块划分
-
+针对需求可以将实现分为三个主要模块 Election、Commit、Node，由三个模块共同组成 Raft：
 <div style="text-align:center">
 	<a href="../img/lab3/module.png">
 	  <img src="../img/lab3/module.png" style="width:600px;"  alt=""/>
 	</a>
 </div>
-
-Raft 分为三个模块 Election、Commit、Node
 
 - Election 负责选举。
 - Commit 负责管理日志，他有两个子模块，Manage 负责管理日志，LogStore 负责日志的存储和读取。
@@ -131,7 +130,7 @@ type logStore struct {
 > 
 > 具体失败原因是：LogStore 中没有考虑一些边界情况，导致在一些特殊情况下 LogStore 中获取同步数据的方法返回中缺少了快照，导致同步数据后，Follower 缺失了快照数据，但这个并没有导致 Lab3 1000次测试中出现失败。
 #### Node Package
-node 包主要负责向节点发起 RPC 以及保存节点的临时状态，作为 Leader 时启动心跳定时器，也充当 Leader 与向其他节点发起 RPC 的中间件。
+Node 包主要负责向节点发起 RPC 以及保存节点的临时状态，作为 Leader 时启动心跳定时器，也充当 Leader 与向其他节点发起 RPC 的中间件。
 ##### UML
 
 <div style="text-align:center">

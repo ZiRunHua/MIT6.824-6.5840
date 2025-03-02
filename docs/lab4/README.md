@@ -1,5 +1,6 @@
 # lab4
 ## 需求
+[Lab 3: KvRaft](http://nil.csail.mit.edu/6.5840/2024/labs/lab-kvraft.html)
 - 实现一个 key/value 存储服务，有多个 Raft 进行复制。
 - Get/Put/Append 方法的调用是线性化的，同时保证多个 Raft 上的执行顺序相同，与 lab2 不同 Put/Append 不需要返回值。
 - 需要处理通过 RPC 调用 raft.Start() 后，Leader 失去领导权的情况，对于出现分区的情况，可以无限等待直到分区结束。
@@ -28,9 +29,9 @@ func Get(e *labrpc.ClientEnd, args GetArgs) (ok bool, reply GetReply) {
 ```
 但如果每声明一个 RPC 都要写一个封装方法，太过麻烦了，假设现在是一个庞大的系统，有非常的多的 RPC，如果每个 RPC 都要写一个封装方法那太影响开发效率了
 
-**优化思路**
+### 优化思路
 
-我希望让 RPC 调用更像普通方法调用（这才更像 RPC），同时提升类型安全性和可读性。使用泛型刚好能够解决
+**我希望让 RPC 调用更像普通方法调用（这才更像 RPC），同时提升类型安全性和可读性**。使用泛型刚好能够解决
 
 一个 RPC 方法由三部分组成，调用对象（一个字符串）、传入参数和返回参数构成，定义为如下结构：
 ```go
@@ -81,7 +82,7 @@ func (ck *Clerk) Append(key string, value string) string {
 ```
 ## 模块划分
 <div style="text-align:center">
-  <img src="../img/lab4/module.png" style="min-width: 500px; max-width:600px" />
+  <img src="../img/lab4/module.png" style="width: 500px;" />
 </div>
 
 ### Client
@@ -100,18 +101,18 @@ func (ck *Clerk) Append(key string, value string) string {
 在完成 Lab3 的 Raft 后，后续 Lab4 和 Lab5 实验都是基于 Raft 去构建系统，
 所以有必要设计一个包去封装客户端与集群的交互，以及服务端对 Raft 的管理，而我们只需要在应用层处理一致性提交后的数据存储。
 
-**最终的实现目标：** 让 RPC 调用不再针对某个服务端发起，而是针对整个集群，集群中的某一基于 Raft 的服务端，不需要关心 Raft 的具体细节，只需关心 Raft 集群中达成一致的数据。
+**实现目标：让 RPC 调用不再针对某个服务端发起，而是针对整个集群，集群中的某一基于 Raft 的服务端，不需要关心 Raft 的具体细节，只需关心 Raft 集群中达成一致的数据。** 
 
 
 > 我相信实现这样一个包，会节省你很多时间，如此便可把更多精力放在后续实验的核心内容上
 > 
 > 通过 Lab4 验证你的 RPC 包，以便在之后的实验中畅通无阻的使用
 
-下面将逐步描述如何构建 RPC 包，我将 RPC 包的职责主要定义为：
+下面将逐步描述如何实现这一目标，我将 RPC 包的职责主要定义为：
 - 封装客户端交互：客户端只需通过 RPC 远程调用集群，无需关心 Leader 的变更，以及消息的重试。
 - 抽象数据存储接口：提供 DataStore 接口，使用者只需实现该接口，即可在 Raft 达成一致后处理提交的数据，无需手动管理 Raft 交互。
 - 管理操作的整个生命周期：接收来自客户端的 RPC 操作，完成去重后传入 Raft，在集群达成一致后，将操作提交应用层，最后将操作结果返回客户端。
-- 管理服务端和 Raft 的交互：除了将来自客户端的操作传入 Raft 外，还负责 Raft 处理提交用户的数据，以及快照管理。
+- 管理服务端和 Raft 的交互：除了将来自客户端的操作传入 Raft 外，还负责处理 Raft 提交的数据，以及快照管理。
 
 依照职责将 RPC 包划分为两部分，Client 与 Server，构成如下 UML：
 
@@ -243,7 +244,8 @@ rpc.go 通过 `DataStore<T>`、`Server<T>` 和 `Clerk` 三个接口为外部提�
 </div>
 
 ####  RPC 封装
-开头提到的关于 RPC 的优化，现在更上一层，加入了 `CommonArgs` 和 `CommonReply` ，它们在 Call 方法中被使用， Call 方法的返回是一个操作完成后的结果，是的，Call 方法不会返回失败，Call 方法中利用 Clerk 接口，完成客户端与集群的全部交互，包括寻找 Leader ，消息重试，直到操作被服务器应答成功，然后 Call 返回操作结果，如此将 RPC 不再是针对某个 Raft 或 Server 发起，而是针对整个集群发起。
+开头提到的关于 RPC 的优化，现在更上一层，加入了 `CommonArgs` 和 `CommonReply` ，它们在 Call 方法中被使用， Call 方法的返回是一个操作完成后的结果，是的，Call 方法不会返回失败，Call 方法中利用 Clerk 接口，完成客户端与集群的全部交互，包括寻找 Leader ，消息重试，直到操作被服务器应答成功，然后 Call 方法返回操作结果，如此将 RPC 不再是针对某个 Raft 或 Server 发起，而是针对整个集群发起。
+> 别忘了调用 `labgob.Register` 注册结构体
 ```go
 type (  
     Method[args any, reply any] string  
@@ -284,4 +286,4 @@ const (
 )
 ```
 
-完成了正确的RPC包后，lab4 和lab5A 只需要实现 DataStore 接口便完成了这部分实验，当然，lab5A 的分片可能要多花点时间。
+完成了正确的RPC包后，lab4 和 lab5A 只需要实现 DataStore 接口便完成了这部分实验，当然，lab5A 的分片可能要多花点时间。
