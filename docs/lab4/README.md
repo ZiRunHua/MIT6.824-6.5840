@@ -85,6 +85,7 @@ func (ck *Clerk) Append(key string, value string) string {
 }
 ```
 ## 模块划分
+
 <div style="text-align:center">
   <img src="../img/lab4/module.png" style="width: 500px;" />
 </div>
@@ -101,6 +102,7 @@ func (ck *Clerk) Append(key string, value string) string {
 - 负责持久化存储数据和快照。
 - 提供数据操作的接口，用于 Server 执行操作。
 - 提供快照的获取和加载的接口，供 Server 管理快照。
+
 ## RPC Package
 在完成 Lab3 的 Raft 后，后续 Lab4 和 Lab5 实验都是基于 Raft 去构建系统，
 所以有必要设计一个包去封装客户端与集群的交互，以及服务端对 Raft 的管理，而我们只需要在应用层处理一致性提交后的数据存储。
@@ -197,18 +199,23 @@ type CommonArgs[T any] struct {
 }
 ```
 MsgId 和 OpId 由 client 维持自增的，MsgId 与 ClientId 组合用来重复检测，ClientId 与 OpId 组合作为操作的唯一标识，重复检测后 MsgId 就没用了，最后传给 Raft 的是 Data 部分。
+
 ### Client Package
 RPC 调用的发起方，承担的作用非常简单，主要提供获取集群服务、更新 Leader 等接口方法，并负责维护操作 ID 和 MsgID 的自增。
+
 #### UML
+
 <div style="text-align:center">
   <img src="../img/lab4/client-uml.svg" />
 </div>
 
 > 后面提到的 Client 都代指 Clerk 这个接口
+
 ### Server Package
 RPC 调用的接收方，主要的职责是维护一个操作的生命周期，从接收客户端操作消息开始，将操作传入 Raft，到操作被 Raft 提交，将操作通过 DataStore 接口应用，最后向等待的客户端返回操作结果。
 
 #### 操作的生命周期
+
 <div style="text-align:center">
   <img src="../img/lab4/msg-life-cycle.png" style="min-width: 800px; max-width:80%" />
 </div>
@@ -231,6 +238,7 @@ RPC 调用的接收方，主要的职责是维护一个操作的生命周期，�
 
 其实一张图胜千言，操作等待组的实现使用通道就能完成，如果你完成了lab4A，那lab4B的快照对你来说就非常容易了
 #### UML
+
 <div style="text-align:center">
   <img src="../img/lab4/server-uml.svg" />
 </div>
@@ -250,6 +258,7 @@ rpc.go 通过 `DataStore<T>`、`Server<T>` 和 `Clerk` 三个接口为外部提�
 ####  RPC 封装
 开头提到的关于 RPC 的优化，现在更上一层，加入了 `CommonArgs` 和 `CommonReply` ，它们在 Call 方法中被使用， Call 方法的返回是一个操作完成后的结果，是的，Call 方法不会返回失败，Call 方法中利用 Clerk 接口，完成客户端与集群的全部交互，包括寻找 Leader ，消息重试，直到操作被服务器应答成功，然后 Call 方法返回操作结果，如此将 RPC 不再是针对某个 Raft 或 Server 发起，而是针对整个集群发起。
 > 别忘了调用 `labgob.Register` 注册结构体
+
 ```go
 type (  
     Method[args any, reply any] string  

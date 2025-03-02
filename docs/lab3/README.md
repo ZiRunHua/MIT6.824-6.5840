@@ -2,11 +2,11 @@
 title: Lab3：Raft 的实现
 nav_order: 2
 ---
-## lab3
-### 需求
+# lab3
+## 需求
 [Lab 3: Raft](http://nil.csail.mit.edu/6.5840/2024/labs/lab-raft.html)
-### 系统设计
-#### 模块划分
+## 系统设计
+### 模块划分
 针对需求可以将实现分为三个主要模块 Election、Commit、Node，由三个模块共同组成 Raft：
 <div style="text-align:center">
 	<a href="../img/lab3/module.png">
@@ -26,24 +26,24 @@ Raft 在需要发起选举时，将新的选举号传递给 Election，Election 
 
 Raft 将接收的日志和快照交由 Commit 处理，Commit 将数据交由 LogStore 存储，并在处于 Leader 状态时启用 Manager，由 Manager 负责向 Follower 同步状态、维持 Follower 的同步进度，以及完成被大多数节点成功同步的日志的两阶段提交。
 
-#### 锁顺序
+### 锁顺序
 
 为各个模块设置锁，从而减低锁的颗粒度，提高性能，同时为了避免死锁，对于 Election 和 Commit 向 Raft 的回调，需解除当前锁后回调、或在新的协程中发起回调，最后依照模块调用关系形成如下锁顺序：
 <div style="text-align:center">
   <img src="../img/lab3/lock.png" style="width:420px" />
 </div>
 
-### Package 设计
-#### UML
+## Package 设计
+### UML
 根据模块划分，将各模块设置为独立的包，由 Raft 进行统一管理，整体大致构成如下依赖关系：
 <div style="text-align:center">
   <img src="../img/lab3/raft-uml.svg" style="" />
 </div>
 Raft 结构体在各包中承担不同角色，提供相应的接口方法。在 Election 包中充当 Candidate 提供选举完成后的回调，在 Commit 包中提供提交应用以及持久化的接口，在 Node 包中提供任期过期的回调，以及提供一些 RPC 调用和公共方法。
 
-#### Election Package
+### Election Package
 
-##### UML
+#### UML
 
 <div style="text-align:center">
   <img src="../img/lab3/election-uml.svg" style="padding:16px" />
@@ -51,11 +51,11 @@ Raft 结构体在各包中承担不同角色，提供相应的接口方法。在
 
 - 在 `Election` 看来，整个 Raft 实例是一个 `Candidate`，负责竞选并处理选举结果。
 - 集群中的每个 `Node` 被视为 `Voter`，负责参与预选和正式投票。
-##### 成为Leader的条件
+#### 成为Leader的条件
 - 最后一条日志最新。
 - 论文 `Figure 8` 中提到的 Leader 需要拥有所有已提交的日志条目。
 
-##### 预选举
+#### 预选举
 每次选举会 New 一个新的 Election，并在通过预选举后发起正式选举，测试中频繁让节点失联，所以引入预选举机制保证 Leader 免受重连节点的影响是非常有必要的，对于性能的提高很有帮助。
 >预选举介绍
 >
@@ -63,15 +63,15 @@ Raft 结构体在各包中承担不同角色，提供相应的接口方法。在
 >
 >当分区的 Follower 重新与集群中的其他节点建立通信时，由于其 term 值比当前 Leader 和其他节点都大，根据 Raft 规则，Leader 会发现自身的 term 较小并转为 Follower 状态。然而，由于没有新的 Leader 产生，集群必须重新发起选举，才能恢复正常工作。 
 >预选举通过在正式发起选举前，候选节点向集群中的其他节点发送预选投票请求，询问自己是否具备选举资格。如果大多数节点同意，其才会自增 term 并发起正式选举。这样可以有效避免脱离集群的节点因无意义的 term 增长而干扰集群的正常运行。
-#### Commit Package
+### Commit Package
 这是最重要的包，主要负责日志的管理，Node 在这里充当 Follower，提供了状态同步、应用同步和同步进度更新等接口。
 
-##### UML
+#### UML
 <div style="text-align:center">
   <img src="../img/lab3/commit-uml.svg" style="padding:16px" />
 </div>
 
-##### 日志的提交应用
+#### 日志的提交应用
 > “提交”或“提交应用”一般指的是，向实验测试提供的 `chan` 提交数据
 
 为了顺利通过测试，了解测试是非常有必要的，提交应用的测试代码主要在 `/src/Raft/config.go` 下两个方法 `applier` 和 `checkLogs` ，它们的要求主要是：
@@ -107,7 +107,7 @@ Leader 在检查到一条新的日志被大多数节点同步后，更新自己�
 - 对方日志更新，但提交进度是旧的，检查对方未提交日志中，在两个提交进度之间的日志是否一致，一致则通过。
 > 我的做法存在一定优化空间，当一个节点在向其他节点发送拉票或预选举请求时，需要携带所有未提交的日志，数据可能过大，在一些测试中观察到 Candidate 选举时一个 RPC 发送上百条日志，而需要用到的只是两个提交进度之间的日志（可能只有几条），在 Candidate 提交进度较新时甚至用不到，可能的一种解决方案是：预选举或拉票请求仅发送最新日志和最新提交进度，当节点在接收到预选举或拉票请求时，发现提交进度是旧，则将提交进度间相差的日志返回给对方，由对方进行检查这部分日志是否一致，一致才可以认为是通过的，如此便减少了选举时使用的带宽，但是这带来了一个问题，投票的结果的决定权，由 Candidate 和 Follower 共同决定，这可能与直觉相悖。
 
-##### 持久化
+#### 持久化
 持久化话非常简单，只需要在 Lab3 的基础上，在合适的地方调用持久化方法即可。
 
 > 掉过的一些坑：
@@ -117,7 +117,7 @@ Leader 在检查到一条新的日志被大多数节点同步后，更新自己�
 >实验自带了 Gob 编码，Gob 非常重要的是它会包含数据原始类型信息，在序列化和反序列的过程中不丢失类型，序列化时会记录 `interface{}` 变量内部的类型信息，所以是用 json 这种不具备类型安全的序列化工具，进行持久化会导致不通过测试，这是我走过的坑。
 >
 > 我在一开始时没注意到实验给出了使用 gob 持久化的示例，我直接使用 json，实验的一些测试中使用 `rand.Int()` 作为需要同步的日志传入 Raft ，`rand.Int()` 可能会产生很大的 `int` 数，然而经过 json 序列化和反序列化后，数据类型很可能变为 `float` ，如果你没有在日志中打印变量类型（正常都不会），你会观察到集群已经达成一致状态了，但测试还是报告：`one(×) failed to reach agreement` ，因为实验中需要同步日志的数据类型都是 `interface{}` ，而 `interface{}` 变量间的比等首先检查的的类型信息。
-##### LogStore
+#### LogStore
 
 LogStore 没什么好说的主要就是维护数据的存储和查询，我使用了这样的数据结构：
 ```go
@@ -133,9 +133,9 @@ type logStore struct {
 > 值得一提的是，在 Lab3 1000 次测试通过的情况下，我在 Lab4 的测试中发现了由 Lab3 部分导致的测试失败，所以或许需要 10000 次测试通过才证明 Raft 实现的稳定性。
 > 
 > 具体失败原因是：LogStore 中没有考虑一些边界情况，导致在一些特殊情况下 LogStore 中获取同步数据的方法返回中缺少了快照，导致同步数据后，Follower 缺失了快照数据，但这个并没有导致 Lab3 1000次测试中出现失败。
-#### Node Package
+### Node Package
 Node 包主要负责向节点发起 RPC 以及保存节点的临时状态，作为 Leader 时启动心跳定时器，也充当 Leader 与向其他节点发起 RPC 的中间件。
-##### UML
+#### UML
 
 <div style="text-align:center">
   <img src="../img/lab3/node-uml.svg" style="padding:16px" />
