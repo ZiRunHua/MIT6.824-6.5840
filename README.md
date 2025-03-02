@@ -1,6 +1,6 @@
 # MIT6.824-6.5840
 ## GitHub Pages
-[github.com/ZiRunHua/MIT6.824-6.5840](https://zirunhua.github.io/MIT6.824-6.5840/)
+[zirunhua.github.io/MIT6.824-6.5840](https://zirunhua.github.io/MIT6.824-6.5840/)
 
 ## 介绍
 **MIT6.5840分布式系统课程深度解析：后端工程师的进阶指南**
